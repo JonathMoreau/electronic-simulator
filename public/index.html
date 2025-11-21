@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestionnaire de Breadboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Gestionnaire de Breadboard</h1>
+            <div class="controls">
+                <button id="clearBtn">Effacer</button>
+                <button id="resetBtn">Réinitialiser</button>
+            </div>
+        </header>
+        
+        <div class="components-panel">
+            <h3>Composants</h3>
+            <div class="components-list">
+                <button class="component-btn" data-component-type="generic">
+                    <span class="component-icon">⚡</span>
+                    <span>Composant Générique</span>
+                </button>
+                <button class="component-btn" data-component-type="led">
+                    <span class="component-icon">💡</span>
+                    <span>LED</span>
+                </button>
+                <button class="component-btn" data-component-type="resistance">
+                    <span class="component-icon">⏱</span>
+                    <span>Résistance</span>
+                </button>
+                <button class="component-btn" data-component-type="cable">
+                    <span class="component-icon">━</span>
+                    <span>Cable</span>
+                </button>
+            </div>
+            <div class="placement-mode">
+                <span id="placementStatus">Mode: Sélection</span>
+            </div>
+        </div>
+        
+        <div class="workspace">
+            <div class="breadboard-wrapper">
+                <div class="breadboard-controls">
+                    <button id="zoomInBtn" title="Zoom avant">+</button>
+                    <button id="zoomOutBtn" title="Zoom arrière">-</button>
+                    <button id="zoomResetBtn" title="Réinitialiser le zoom">⟲</button>
+                    <span id="zoomLevel">75%</span>
+                </div>
+                <div class="breadboard-container">
+                    <div id="breadboard" class="breadboard">
+                        <!-- La breadboard sera générée dynamiquement par JavaScript -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <h3>Informations</h3>
+                <div id="info">Cliquez sur un trou pour voir les informations</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Configuration électrique globale (accessible depuis led.js)
+        window.POWER_CONFIG = {
+            positiveVoltage: 5.0,
+            negativeVoltage: 0.0
+        };
+    </script>
+           <script src="components.js"></script>
+           <script src="series-circuit.js"></script>
+           <script src="led.js"></script>
+           <script src="resistance.js"></script>
+           <script src="switch.js"></script>
+           <script src="vsum.js"></script>
+           <script src="cable.js"></script>
+           <script src="circuits.js"></script>
+           <script src="breadboard.js"></script>
+</body>
+</html>
+

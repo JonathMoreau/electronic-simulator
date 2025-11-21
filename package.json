@@ -1,0 +1,26 @@
+{
+  "name": "breadboard-simulator",
+  "version": "1.0.0",
+  "description": "Application Node.js pour gérer une carte breadboard",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix"
+  },
+  "keywords": [
+    "breadboard",
+    "electronics",
+    "simulator"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.1"
+  }
+}
