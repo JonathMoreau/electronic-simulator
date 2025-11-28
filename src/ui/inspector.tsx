@@ -1,13 +1,199 @@
 import React, { useState, useEffect } from 'react';
 
+function trimTrailingZeros(value: string): string {
+  return value.replace(/\.?0+$/, '');
+}
+
 function formatResistanceValue(rOhm: number): string {
-  if (rOhm >= 1e6) return `${(rOhm / 1e6).toFixed(2)} MΩ`;
-  if (rOhm >= 1e3) return `${(rOhm / 1e3).toFixed(2)} kΩ`;
-  return `${rOhm.toFixed(0)} Ω`;
+  if (rOhm >= 1e6) return `${trimTrailingZeros((rOhm / 1e6).toFixed(3))} MΩ`;
+  if (rOhm >= 1e3) return `${trimTrailingZeros((rOhm / 1e3).toFixed(3))} kΩ`;
+  const decimals = rOhm >= 10 ? 1 : 2;
+  return `${trimTrailingZeros(rOhm.toFixed(decimals))} Ω`;
+}
+
+type ColorBand = { label: string; hex: string };
+
+const DIGIT_COLORS: ColorBand[] = [
+  { label: 'Noir (0)', hex: '#000000' },
+  { label: 'Marron (1)', hex: '#5D4037' },
+  { label: 'Rouge (2)', hex: '#C62828' },
+  { label: 'Orange (3)', hex: '#EF6C00' },
+  { label: 'Jaune (4)', hex: '#FBC02D' },
+  { label: 'Vert (5)', hex: '#2E7D32' },
+  { label: 'Bleu (6)', hex: '#1565C0' },
+  { label: 'Violet (7)', hex: '#6A1B9A' },
+  { label: 'Gris (8)', hex: '#616161' },
+  { label: 'Blanc (9)', hex: '#F5F5F5' }
+];
+
+const MULTIPLIER_COLORS: Record<number, ColorBand> = {
+  [-2]: { label: 'Argent (×10⁻²)', hex: '#BDBDBD' },
+  [-1]: { label: 'Or (×10⁻¹)', hex: '#D4AF37' },
+  0: { label: 'Noir (×10⁰)', hex: '#000000' },
+  1: { label: 'Marron (×10¹)', hex: '#5D4037' },
+  2: { label: 'Rouge (×10²)', hex: '#C62828' },
+  3: { label: 'Orange (×10³)', hex: '#EF6C00' },
+  4: { label: 'Jaune (×10⁴)', hex: '#FBC02D' },
+  5: { label: 'Vert (×10⁵)', hex: '#2E7D32' },
+  6: { label: 'Bleu (×10⁶)', hex: '#1565C0' },
+  7: { label: 'Violet (×10⁷)', hex: '#6A1B9A' },
+  8: { label: 'Gris (×10⁸)', hex: '#616161' },
+  9: { label: 'Blanc (×10⁹)', hex: '#F5F5F5' }
+};
+
+const TOLERANCE_BAND_1P: ColorBand = { label: 'Marron (±1%)', hex: '#5D4037' };
+
+const RESISTOR_STOCK: number[] = [
+  1,
+  2.2,
+  3.3,
+  10,
+  22,
+  47,
+  68,
+  100,
+  120,
+  150,
+  220,
+  330,
+  470,
+  560,
+  1000,
+  2000,
+  2200,
+  4700,
+  5600,
+  10000,
+  22000,
+  47000,
+  100000,
+  1000000
+];
+
+const RESISTOR_STOCK_SET = new Set(RESISTOR_STOCK);
+
+function isValueInStock(value: number): boolean {
+  if (!isFinite(value)) return false;
+  if (RESISTOR_STOCK_SET.has(value)) return true;
+  // Tolérance numérique très serrée pour les flottants (ex: 2.2000000001)
+  return RESISTOR_STOCK.some((stockValue) => Math.abs(stockValue - value) <= Math.max(1e-6, stockValue * 1e-6));
+}
+
+type ResistorSuggestion = {
+  value: number;
+  parts: number[];
+  mode: 'single' | 'series' | 'parallel';
+  errorPct: number;
+};
+
+const SUGGESTION_LABELS: Record<ResistorSuggestion['mode'], string> = {
+  single: 'Résistance unique',
+  series: 'Deux en série',
+  parallel: 'Deux en parallèle'
+};
+
+function formatParts(parts: number[], mode: ResistorSuggestion['mode']): string {
+  if (mode === 'single') return formatResistanceValue(parts[0]);
+  const separator = mode === 'series' ? ' + ' : ' ∥ ';
+  return parts.map((p) => formatResistanceValue(p)).join(separator);
+}
+
+function buildSuggestion(value: number, parts: number[], mode: ResistorSuggestion['mode'], target: number): ResistorSuggestion {
+  const errorPct = Math.abs(value - target) / target * 100;
+  return { value, parts, mode, errorPct };
+}
+
+function getResistorSuggestions(target: number): ResistorSuggestion[] {
+  if (!isFinite(target) || target <= 0) return [];
+  const suggestions: ResistorSuggestion[] = [];
+
+  // Singles
+  let bestSingle: ResistorSuggestion | null = null;
+  for (const r of RESISTOR_STOCK) {
+    const candidate = buildSuggestion(r, [r], 'single', target);
+    if (!bestSingle || candidate.errorPct < bestSingle.errorPct) {
+      bestSingle = candidate;
+    }
+  }
+  if (bestSingle) suggestions.push(bestSingle);
+
+  // Series & parallel combinations of two resistors (allow same value twice)
+  let bestSeries: ResistorSuggestion | null = null;
+  let bestParallel: ResistorSuggestion | null = null;
+  for (let i = 0; i < RESISTOR_STOCK.length; i++) {
+    for (let j = i; j < RESISTOR_STOCK.length; j++) {
+      const r1 = RESISTOR_STOCK[i];
+      const r2 = RESISTOR_STOCK[j];
+      const seriesValue = r1 + r2;
+      const parallelValue = (r1 * r2) / (r1 + r2);
+
+      const seriesSuggestion = buildSuggestion(seriesValue, [r1, r2], 'series', target);
+      if (!bestSeries || seriesSuggestion.errorPct < bestSeries.errorPct) {
+        bestSeries = seriesSuggestion;
+      }
+
+      const parallelSuggestion = buildSuggestion(parallelValue, [r1, r2], 'parallel', target);
+      if (!bestParallel || parallelSuggestion.errorPct < bestParallel.errorPct) {
+        bestParallel = parallelSuggestion;
+      }
+    }
+  }
+
+  if (bestSeries) suggestions.push(bestSeries);
+  if (bestParallel) suggestions.push(bestParallel);
+
+  return suggestions
+    .filter((s, idx, arr) => arr.findIndex((o) => o.mode === s.mode) === idx)
+    .sort((a, b) => a.errorPct - b.errorPct)
+    .slice(0, 3);
+}
+
+function computeColorBands(valueOhm: number) {
+  if (!isFinite(valueOhm) || valueOhm <= 0) return null;
+  const exponent = Math.floor(Math.log10(valueOhm));
+  const normalized = valueOhm / Math.pow(10, exponent);
+  let firstThree = Math.round(normalized * 100);
+  let multiplierExponent = exponent - 2;
+
+  if (firstThree >= 1000) {
+    firstThree = Math.round(firstThree / 10);
+    multiplierExponent += 1;
+  }
+
+  const firstDigit = Math.floor(firstThree / 100);
+  const secondDigit = Math.floor((firstThree % 100) / 10);
+  const thirdDigit = firstThree % 10;
+  const multiplierBand = MULTIPLIER_COLORS[multiplierExponent];
+
+  if (
+    firstDigit < 0 ||
+    firstDigit > 9 ||
+    secondDigit < 0 ||
+    secondDigit > 9 ||
+    thirdDigit < 0 ||
+    thirdDigit > 9 ||
+    !multiplierBand
+  ) {
+    return null;
+  }
+
+  return {
+    bands: [
+      DIGIT_COLORS[firstDigit],
+      DIGIT_COLORS[secondDigit],
+      DIGIT_COLORS[thirdDigit],
+      multiplierBand,
+      TOLERANCE_BAND_1P
+    ]
+  };
 }
 
 export default function Inspector({ components, selectedComponent, setSelectedComponent, setComponents, wires, setWires, result }: any) {
   const [localValue, setLocalValue] = useState<string>('');
+  const isResistorSelected = selectedComponent?.type === 'RESISTOR' && 'rOhm' in selectedComponent;
+  const resistorColorInfo = isResistorSelected ? computeColorBands(selectedComponent.rOhm) : null;
+  const resistorInStock = isResistorSelected ? isValueInStock(selectedComponent.rOhm) : false;
+  const resistorSuggestions = isResistorSelected ? getResistorSuggestions(selectedComponent.rOhm) : [];
 
   useEffect(() => {
     if (selectedComponent?.type === 'RESISTOR' && 'rOhm' in selectedComponent) {
@@ -199,6 +385,79 @@ export default function Inspector({ components, selectedComponent, setSelectedCo
               </div>
               <div style={{fontSize: 11, color: '#666', marginTop: 4}}>
                 {formatResistanceValue(selectedComponent.rOhm)}
+              </div>
+              <div style={{marginTop: 10, padding: 8, border: '1px solid #e0e0e0', borderRadius: 4, backgroundColor: '#fafafa'}}>
+                <div style={{fontSize: 12, fontWeight: 600}}>Code couleur 5 bandes (1%, 1/2 W)</div>
+                {resistorColorInfo ? (
+                  <>
+                    <div style={{display: 'flex', gap: 12, marginTop: 8}}>
+                      {resistorColorInfo.bands.map((band, idx) => (
+                        <div key={`${band.label}-${idx}`} style={{textAlign: 'center', fontSize: 10}}>
+                          <div
+                            style={{
+                              width: 20,
+                              height: 50,
+                              margin: '0 auto',
+                              borderRadius: 3,
+                              border: '1px solid #444',
+                              backgroundColor: band.hex
+                            }}
+                            title={band.label}
+                          />
+                          <div style={{marginTop: 4}}>{band.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{marginTop: 8, fontSize: 11, color: '#E65100'}}>
+                    ⚠️ Impossible de calculer le code couleur pour cette valeur.
+                  </div>
+                )}
+                <div style={{marginTop: 8, fontSize: 11}}>
+                  {resistorInStock ? (
+                    <span style={{color: '#2E7D32', fontWeight: 600}}>
+                      ✓ Disponible dans votre stock (1/2 W)
+                    </span>
+                  ) : (
+                    <span style={{color: '#B71C1C', fontWeight: 600}}>
+                      ⚠️ Valeur absente de votre stock personnel
+                    </span>
+                  )}
+                </div>
+                {!resistorInStock && resistorSuggestions.length > 0 && (
+                  <div style={{marginTop: 10, padding: 8, border: '1px dashed #bdbdbd', borderRadius: 4, backgroundColor: '#fff'}}>
+                    <div style={{fontSize: 12, fontWeight: 600}}>Alternatives proposées</div>
+                    <div style={{fontSize: 11, color: '#555', marginTop: 4}}>
+                      Objectif: {formatResistanceValue(selectedComponent.rOhm)}
+                    </div>
+                    <div style={{display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8}}>
+                      {resistorSuggestions.map((suggestion, idx) => (
+                        <div
+                          key={`${suggestion.mode}-${idx}`}
+                          style={{
+                            border: '1px solid #e0e0e0',
+                            borderRadius: 4,
+                            padding: 6,
+                            backgroundColor: '#fdfdfd'
+                          }}
+                        >
+                          <div style={{fontSize: 11, fontWeight: 600}}>
+                            {SUGGESTION_LABELS[suggestion.mode]}
+                          </div>
+                          <div style={{fontSize: 11}}>
+                            ≈ {formatResistanceValue(suggestion.value)} ({suggestion.errorPct.toFixed(2)}% d'écart)
+                          </div>
+                          {suggestion.mode !== 'single' && (
+                            <div style={{fontSize: 10, color: '#555', marginTop: 2}}>
+                              {formatParts(suggestion.parts, suggestion.mode)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
